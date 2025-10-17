@@ -5,12 +5,36 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const elementToggleFunc = elem => elem && elem.classList.toggle('active');
 
-// ---------- Sidebar ----------
+// ---------- Sidebar Toggle (Mobile/Tablet) ----------
 const sidebar = $('[data-sidebar]');
 const sidebarBtn = $('[data-sidebar-btn]');
+
 if (sidebar && sidebarBtn) {
-  sidebarBtn.addEventListener('click', () => elementToggleFunc(sidebar));
+  sidebarBtn.addEventListener('click', () => {
+    elementToggleFunc(sidebar);
+    sidebarBtn.classList.toggle('active');
+  });
 }
+
+// Cerrar sidebar al hacer click en un link de navegación (mobile)
+const navigationLinks = $$('[data-nav-link]');
+navigationLinks.forEach(link => {
+  link.addEventListener('click', () => {
+    // Cerrar sidebar en pantallas pequeñas
+    if (window.innerWidth < 1024) {
+      sidebar?.classList.remove('active');
+      sidebarBtn?.classList.remove('active');
+    }
+  });
+});
+
+// Cerrar sidebar al cambiar tamaño de ventana
+window.addEventListener('resize', () => {
+  if (window.innerWidth >= 1024) {
+    sidebar?.classList.remove('active');
+    sidebarBtn?.classList.remove('active');
+  }
+});
 
 // ---------- Filtro de proyectos / Select ----------
 const select = $('[data-select]');
@@ -21,7 +45,9 @@ const filterItems = $$('[data-filter-item]');
 
 const filterFunc = selectedValue => {
   filterItems.forEach(item => {
-    item.classList.toggle('active', selectedValue === 'todos' || selectedValue === item.dataset.category);
+    const category = item.dataset.category.toLowerCase().trim();
+    const value = selectedValue.toLowerCase().trim();
+    item.classList.toggle('active', value === 'todos' || value === category);
   });
 };
 
@@ -30,7 +56,7 @@ if (select) {
   select.addEventListener('click', () => elementToggleFunc(select));
   selectItems.forEach(item => {
     item.addEventListener('click', function () {
-      const value = this.innerText.toLowerCase();
+      const value = this.innerText.toLowerCase().trim();
       if (selectValue) selectValue.innerText = this.innerText;
       elementToggleFunc(select);
       filterFunc(value);
@@ -42,7 +68,7 @@ if (select) {
 let lastClickedBtn = filterBtn[0] || null;
 filterBtn.forEach(btn => {
   btn.addEventListener('click', function () {
-    const value = this.innerText.toLowerCase();
+    const value = this.innerText.toLowerCase().trim();
     if (selectValue) selectValue.innerText = this.innerText;
     filterFunc(value);
     if (lastClickedBtn) lastClickedBtn.classList.remove('active');
@@ -51,8 +77,13 @@ filterBtn.forEach(btn => {
   });
 });
 
+// Inicializar con "Todos" activo
+if (filterBtn.length > 0 && !lastClickedBtn) {
+  filterBtn[0].classList.add('active');
+  lastClickedBtn = filterBtn[0];
+}
+
 // ---------- Navegación de páginas ----------
-const navigationLinks = $$('[data-nav-link]');
 const pages = $$('[data-page]');
 
 const showPage = page => {
@@ -74,18 +105,23 @@ navigationLinks.forEach(link => {
   });
 });
 
-// ---------- Abrir CV en ventana completa con PDF escalado al 42% ----------
+// ---------- Descargar CV en nueva ventana ----------
 const cvLinks = $$('.download-cv-link');
 cvLinks.forEach(link => {
   link.addEventListener('click', e => {
     e.preventDefault();
     const url = link.href;
+    const isSmallScreen = window.innerWidth < 768;
+    const scale = isSmallScreen ? 60 : 42;
+    
     const win = window.open('', '_blank', `width=${screen.width},height=${screen.height},top=0,left=0,scrollbars=yes,resizable=yes`);
     if (win) {
       win.document.write(`
         <html>
           <head>
             <title>CV Alberto Delgado</title>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
               html, body {
                 margin: 0;
@@ -99,7 +135,7 @@ cvLinks.forEach(link => {
                 background: #333;
               }
               iframe {
-                width: 42%;
+                width: ${scale}%;
                 height: 100%;
                 border: none;
               }
@@ -122,7 +158,7 @@ const formEmail = document.querySelector('[data-form]');
 const submitBtn = formEmail.querySelector('[data-form-btn]');
 const inputs = formEmail.querySelectorAll('[data-form-input]');
 
-// Limitar la cantidad de caracteres en tiempo real (extra seguro)
+// Límites de caracteres
 const LIMITS = {
   from_name: 50,
   email: 100,
@@ -134,7 +170,7 @@ inputs.forEach(input => {
     const name = input.name;
     const max = LIMITS[name];
     if (max && this.value.length > max) {
-      this.value = this.value.slice(0, max); // Recorta el exceso si pega o escribe de más
+      this.value = this.value.slice(0, max);
     }
   });
 });
@@ -172,15 +208,24 @@ function validateForm() {
 }
 
 function sendEmailSafe() {
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Enviando...';
+  
   emailjs.sendForm('service_loe1lei', 'template_5iu4wqq', formEmail)
     .then(() => {
       Swal.fire('¡Mensaje enviado!', 'Tu mensaje se ha enviado con éxito.', 'success');
       formEmail.reset();
       submitBtn.classList.add('disabled');
+      generateCaptcha();
+      checkInputs();
     })
     .catch(err => {
-      Swal.fire('Error', 'No fue posible enviar el mensaje.', 'error');
+      Swal.fire('Error', 'No fue posible enviar el mensaje. Intenta de nuevo.', 'error');
       console.error(err);
+    })
+    .finally(() => {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<ion-icon name="paper-plane"></ion-icon><span>Envía el mensaje</span>';
     });
 }
 
@@ -219,20 +264,30 @@ let captchaText = "";
 
 function generateCaptcha() {
   const canvas = document.getElementById("captcha");
+  if (!canvas) return;
+  
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
   captchaText = '';
+  
   for (let i = 0; i < 5; i++) {
     captchaText += chars.charAt(Math.floor(Math.random() * chars.length));
   }
+  
+  // Fondo
   ctx.fillStyle = "#f2f2f2";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Texto
   ctx.font = "25px Arial";
   ctx.fillStyle = "#333";
   ctx.textBaseline = "middle";
   ctx.textAlign = "center";
   ctx.fillText(captchaText, canvas.width / 2, canvas.height / 2);
+  
+  // Líneas de distracción
   for (let i = 0; i < 5; i++) {
     ctx.beginPath();
     ctx.moveTo(Math.random() * canvas.width, Math.random() * canvas.height);
@@ -240,9 +295,15 @@ function generateCaptcha() {
     ctx.strokeStyle = "#999";
     ctx.stroke();
   }
+  
+  // Limpiar input
+  document.getElementById("captcha-input").value = '';
 }
 
-document.getElementById("refresh-captcha").addEventListener("click", generateCaptcha);
+const refreshBtn = document.getElementById("refresh-captcha");
+if (refreshBtn) {
+  refreshBtn.addEventListener("click", generateCaptcha);
+}
 
 function validateCaptcha() {
   const userInput = document.getElementById("captcha-input").value.trim();
@@ -253,15 +314,24 @@ function validateCaptcha() {
   return true;
 }
 
-generateCaptcha();
+// Inicializar captcha cuando el DOM esté listo
+document.addEventListener('DOMContentLoaded', () => {
+  generateCaptcha();
+});
 
-// ---------- Hashnode fetch: render cards 2x2 (4 últimos posts) ----------
+// ---------- Hashnode Blog Posts ----------
 const blogHost = "adeloli.hashnode.dev";
 const postsUL = document.getElementById("hashnode-posts");
 
 function escapeHTML(str) {
   if (!str) return "";
-  return str.replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+  return str.replace(/[&<>"']/g, m => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  }[m]));
 }
 
 if (postsUL) {
@@ -284,30 +354,36 @@ if (postsUL) {
         }
       }
     `;
+    
     try {
-      postsUL.innerHTML = '<li class="blog-item">Cargando posts...</li>';
+      postsUL.innerHTML = '<li class="blog-item"><div style="padding:20px;text-align:center;">Cargando posts...</div></li>';
+      
       const res = await fetch("https://gql.hashnode.com/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query, variables: { host: blogHost } }),
       });
+      
       const json = await res.json();
       const edges = json?.data?.publication?.posts?.edges || [];
       const posts = edges.map(e => e.node).slice(0, 4);
+      
       if (!posts.length) {
-        postsUL.innerHTML = '<li class="blog-item"><div class="content-card"><p>No hay artículos publicados todavía.</p></div></li>';
+        postsUL.innerHTML = '<li class="blog-item"><div style="padding:20px;text-align:center;color:var(--muted-text)">No hay artículos publicados todavía.</div></li>';
         return;
       }
+      
       postsUL.innerHTML = posts.map(post => {
         const title = escapeHTML(post.title);
         const brief = escapeHTML(post.brief || "");
-        const img = post.coverImage && post.coverImage.url ? post.coverImage.url : "";
+        const img = post.coverImage?.url || "";
         const url = post.url || `https://${blogHost}/${post.slug}`;
+        
         return `
           <li class="blog-item">
             <a href="${url}" target="_blank" rel="noopener noreferrer">
               <figure class="blog-img">
-                ${img ? `<img src="${img}" alt="${title}" loading="lazy">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted-text)">No Image</div>`}
+                ${img ? `<img src="${img}" alt="${title}" loading="lazy" decoding="async">` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted-text);background:var(--jet)">Sin imagen</div>`}
               </figure>
               <div class="blog-content">
                 <h3 class="blog-title">${title}</h3>
@@ -319,23 +395,9 @@ if (postsUL) {
       }).join("");
     } catch (err) {
       console.error("Error fetching Hashnode posts:", err);
-      postsUL.innerHTML = '<li class="blog-item"><div class="content-card"><p style="color:tomato">Error al cargar posts de Hashnode</p></div></li>';
+      postsUL.innerHTML = '<li class="blog-item"><div style="padding:20px;text-align:center;color:#ff6b6b">Error al cargar posts de Hashnode</div></li>';
     }
   }
+  
   loadHashnodeCards();
-  // Opcional: recargar cada vez que se muestra la pestaña Blog:
-  /*
-  const navLinks = document.querySelectorAll('[data-nav-link]');
-  navLinks.forEach(link => {
-    link.addEventListener('click', () => {
-      if ((link.dataset.pageTarget || '').toLowerCase() === 'blog') {
-        loadHashnodeCards();
-      }
-    });
-  });
-  */
 }
-
-
-
-
