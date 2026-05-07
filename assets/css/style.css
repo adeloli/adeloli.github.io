@@ -609,3 +609,74 @@ textarea.form-input::-webkit-resizer{display:none}
   outline: 2px solid var(--orange-yellow-crayola, #f9a825);
   outline-offset: 2px;
 }
+
+/*-----------------------------------*\
+  FIX SIDEBAR RECORTE
+\*-----------------------------------*/
+
+/* Móvil (<580px): el sidebar no tiene max-height fija, se adapta al contenido */
+@media (max-width: 579px) {
+  .sidebar {
+    max-height: 180px;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+  .sidebar.active {
+    max-height: 700px; /* suficiente para todo el contenido */
+  }
+  /* El nombre no debe desbordarse */
+  .info-content .name {
+    white-space: normal;
+    word-break: break-word;
+    font-size: clamp(1.2rem, 6vw, 2rem);
+  }
+  /* El email y localización no se cortan */
+  .contact-link,
+  .contact-info address a {
+    white-space: normal;
+    word-break: break-all;
+    overflow: visible;
+  }
+}
+
+/* >=580px colapsado: mismo problema de nombre cortado */
+@media (min-width: 580px) {
+  .sidebar {
+    overflow: hidden;
+  }
+  .sidebar.active {
+    overflow: visible;
+    max-height: 700px;
+  }
+  .info-content .name {
+    white-space: normal;
+    word-break: break-word;
+  }
+  .contact-link,
+  .contact-info address a {
+    white-space: normal;
+    word-break: break-all;
+    overflow: visible;
+  }
+}
+
+/* Desktop >=1024px: sidebar siempre visible y sin recorte */
+@media (min-width: 1024px) {
+  .sidebar {
+    overflow: visible;
+    max-height: none;
+  }
+  .sidebar-info_more {
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+  .info-content .name {
+    white-space: nowrap;
+  }
+  .contact-link,
+  .contact-info address a {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
